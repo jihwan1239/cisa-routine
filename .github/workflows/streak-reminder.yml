@@ -1,24 +1,24 @@
-   name: streak-reminder
+name: streak-reminder
 
-   on:
-     schedule:
-       # UTC 기준입니다. 12:00 UTC = 한국 시간 21:00
-       # 시각을 바꾸려면 한국 시간에서 9를 뺀 값을 넣으세요. (예: 22시 → '0 13 * * *')
-       - cron: '0 12 * * *'
-     workflow_dispatch:
+on:
+  schedule:
+    # UTC 기준입니다. 12:00 UTC = 한국 시간 21:00
+    # 시각을 바꾸려면 한국 시간에서 9를 뺀 값을 넣으세요. (예: 22시 → '0 13 * * *')
+    - cron: '0 12 * * *'
+  workflow_dispatch:
 
-   jobs:
-     push:
-       runs-on: ubuntu-latest
-       steps:
-         - uses: actions/checkout@v4
-         - uses: actions/setup-node@v4
-           with:
-             node-version: 20
-         - run: npm install --no-save web-push@3
-         - run: node push/send.mjs
-           env:
-             VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
-             VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
-             VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
-             PUSH_SUBSCRIPTION: ${{ secrets.PUSH_SUBSCRIPTION }}
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-save web-push@3
+      - run: node push/send.mjs
+        env:
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
+          PUSH_SUBSCRIPTION: ${{ secrets.PUSH_SUBSCRIPTION }}
