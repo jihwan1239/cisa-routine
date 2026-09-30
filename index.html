@@ -140,6 +140,7 @@ function CISA_BANK_ADD(d,arr,t){arr.forEach((x,i)=>CISA_BANK.push({id:'b'+d+(t||
 <script src="bank-n4.js"></script>
 <script src="bank-n4b.js"></script>
 <script src="bank-n5.js"></script>
+<script src="bank-pdf-ko.js"></script>
 
 <script>
 /* ---------- 기본 상수와 도구 ---------- */
@@ -208,8 +209,8 @@ function mergeBank(){
   const map=new Map(S.qs.map(x=>[x.id,x]));let n=0;
   (window.CISA_BANK||[]).forEach(b=>{
     const e=map.get(b.id);
-    if(e){e.q=b.q;e.ch=b.ch;e.a=b.a;e.ex=b.ex;e.d=b.d}
-    else{S.qs.push(Object.assign(mkQ(b.d,b.q,b.ch,b.a,b.ex,b.s),{id:b.id}));n++}
+    if(e){e.q=b.q;e.ch=b.ch;e.a=b.a;e.ex=b.ex;e.d=b.d;e.src=b.s;e.kind=b.kind||'original';e.labels=b.labels||null;e.domainAuto=!!b.domainAuto}
+    else{S.qs.push(Object.assign(mkQ(b.d,b.q,b.ch,b.a,b.ex,b.s),{id:b.id,kind:b.kind||'original',labels:b.labels||null,domainAuto:!!b.domainAuto}));n++}
   });
   return n;
 }
@@ -278,8 +279,9 @@ function pickNew(pool,n){
   }
   return res;
 }
-function buildQ(n,mode,dom){
-  const t=dkey(),pool=S.qs.filter(x=>dom==='all'||x.d==dom),out=[];
+function sourceMatch(x,source){return source==='all'||(source==='pdf'?x.kind==='pdf':x.kind!=='pdf')}
+function buildQ(n,mode,dom,source='all'){
+  const t=dkey(),pool=S.qs.filter(x=>(dom==='all'||x.d==dom)&&sourceMatch(x,source)),out=[];
   const take=a=>{for(const x of a){if(out.length>=n)break;if(!out.includes(x.id))out.push(x.id)}};
   if(mode==='wrong'){take(shuffle(pool.filter(x=>x.seen>0&&x.last===0)));return out}
   if(mode==='new'){take(pickNew(pool,n));return out}
@@ -293,8 +295,8 @@ function newSession(ids,mock){
   if(mock)qs.deadline=Date.now()+MOCK.min*60000;
   prepQ();tab='quiz';render(true);
 }
-function startQ(n,mode='auto',dom='all'){
-  const ids=buildQ(n,mode,dom);
+function startQ(n,mode='auto',dom='all',source='all'){
+  const ids=buildQ(n,mode,dom,source);
   if(!ids.length){toast(mode==='wrong'?'다시 풀 오답이 없어요.':'풀 문제가 없어요.');return}
   newSession(ids,false);
 }
@@ -514,6 +516,8 @@ function vQuiz(){
   const wrongN=S.qs.filter(x=>x.last===0).length;
   return `<h1>문제 풀기</h1>
   <div class="panel">
+    <label for="qsource">문제 출처</label>
+    <select id="qsource"><option value="all">전체</option><option value="original">기존 자체 제작 문제</option><option value="pdf">업로드 PDF 한글 문제</option></select>
     <label for="qdom">도메인</label>
     <select id="qdom"><option value="all">전체</option>${DOMAINS.map(d=>`<option value="${d.id}">${d.id}. ${d.name}</option>`).join('')}</select>
     <label for="qmode">방식</label>
@@ -534,10 +538,11 @@ function vQ(){
   return `<div class="row between" style="margin-top:0"><span class="muted">${m?'모의고사 ':''}${qs.i+1} / ${qs.ids.length}${m?` <span class="timer ${low?'low':''}" id="timer">${remain()}</span>`:''}</span><button class="link" data-act="quit">${m?'제출하기':'그만하기'}</button></div>
   <div class="bar"><i style="width:${(qs.i+(pk?1:0))/qs.ids.length*100}%"></i></div>
   <p class="muted" style="margin-top:14px">도메인 ${it.d}. ${esc(dn?dn.name:'')}</p>
+  ${it.kind==='pdf'?`<p class="muted">${esc(it.src)} · 영역 자동 분류</p>`:''}
   <h1 class="q">${esc(it.q)}</h1>
   ${qs.perm.map((o,d)=>{let c='ch';if(pk){if(m){if(d===qs.picked)c+=' sel'}else if(o===it.a)c+=' right';else if(d===qs.picked)c+=' wrong'}
-    return `<button class="${c}" data-act="ans" data-i="${d}" ${pk?'disabled':''}><b>${'①②③④⑤'[d]}</b><span>${esc(it.ch[o])}</span></button>`}).join('')}
-  ${pk&&!m?`<div class="panel fb ${okp?'ok':'bad'}"><strong>${okp?'정답이에요':'오답이에요'}</strong><p style="margin-top:6px">${esc(it.ex||'해설이 없는 문제예요.')}</p>${qs.ai?`<div class="ai">${esc(qs.ai)}</div>`:''}</div>`:''}
+    return `<button class="${c}" data-act="ans" data-i="${d}" ${pk?'disabled':''}><b>${'①②③④⑤⑥⑦⑧⑨⑩'[d]||String(d+1)}</b><span>${it.labels?`<small style="color:var(--muted)">원문 ${esc(it.labels[o])} · </small>`:''}${esc(it.ch[o])}</span></button>`}).join('')}
+  ${pk&&!m?`<div class="panel fb ${okp?'ok':'bad'}"><strong>${okp?'정답이에요':'오답이에요'}</strong><p style="margin-top:6px">${esc(it.ex||'해설이 없는 문제예요.')}${it.kind==='pdf'?'<br><small>정답과 해설은 업로드 PDF 기준입니다. 원문의 오역·정답 오류 여부는 공식 자료와 대조해 주세요.</small>':''}</p>${qs.ai?`<div class="ai">${esc(qs.ai)}</div>`:''}</div>`:''}
   ${pk?`<div class="row">${!m&&S.key&&!qs.ai?'<button class="btn ghost" data-act="ai">AI 해설 더 보기</button>':''}<button class="btn" data-act="next">${qs.i+1>=qs.ids.length?'결과 보기':'다음 문제'}</button></div>`:''}`;
 }
 function celebrate(was){
@@ -641,6 +646,7 @@ function vPush(){
         <li>저장소 Actions 탭의 streak-reminder에서 Run workflow로 바로 시험해 봐요.</li>
       </ol>
       <div class="row"><button class="btn ghost" data-act="vapid">${S.vapidPub?'알림 키 새로 만들기':'알림 키 만들기'}</button></div>
+      <label for="vapid-existing">이미 사용하는 VAPID 공개키 (새 기기·새 홈 화면 앱)</label><input id="vapid-existing" autocomplete="off" placeholder="기존 VAPID_PUBLIC_KEY 붙여넣기" value="${esc(S.vapidPub||'')}"><button class="btn ghost" data-act="reuse-vapid" style="margin-top:10px">기존 공개키 적용</button><p class="muted">기존 키 쌍은 유지하고 이 기기의 구독만 새로 등록합니다. 개인키는 GitHub Secrets에만 둡니다.</p>
       ${S.vapidPub?`<label>VAPID_PUBLIC_KEY</label><textarea class="code" readonly>${esc(S.vapidPub)}</textarea><div class="row"><button class="btn ghost" data-act="copy" data-v="pub">공개키 복사</button></div>`:''}
       ${ui.priv?`<label>VAPID_PRIVATE_KEY (지금만 보여요)</label><textarea class="code" readonly>${esc(ui.priv)}</textarea><div class="row"><button class="btn ghost" data-act="copy" data-v="priv">개인키 복사</button></div><p class="muted">개인키는 저장하지 않아요. GitHub Secrets에만 넣고 다른 곳에 올리지 마세요.</p>`:''}
       ${S.vapidPub?`<div class="row"><button class="btn" data-act="psub">이 기기 알림 켜기</button></div>`:''}
@@ -677,7 +683,7 @@ function vSettings(){
 d는 도메인 번호(1~5), a는 정답 보기의 순번(0부터)이에요.</pre></details>
     <div class="row"><button class="btn danger" data-act="reset">전부 초기화</button></div>
   </div>
-  <p class="muted">기본 문제 ${CISA_BANK.length}개는 CISA 공식 출제 범위를 바탕으로 새로 쓴 연습 문제예요. 실제 기출이나 덤프가 아니에요.</p>`;
+  <p class="muted">기존 자체 제작 문제 ${CISA_BANK.filter(x=>x.kind!=='pdf').length}개 + 업로드 PDF 한글 문제 ${CISA_BANK.filter(x=>x.kind==='pdf').length}개입니다. PDF의 정답·해설은 원문 그대로이며 공식 검증 자료가 아닙니다. PDF 문제의 영역은 내용 키워드로 자동 분류했습니다.</p>`;
 }
 function render(top){
   const v={today:vToday,quiz:vQuiz,cards:vCards,src:vSources,set:vSettings}[tab]();
@@ -702,7 +708,7 @@ document.addEventListener('click',async e=>{
   switch(a){
     case 'tab':if(ui.read){readerTick();ui.read=null;readT=0}tab=b.dataset.t;render(true);return;
     case 'startq':startQ(+b.dataset.n);return;
-    case 'startq-form':startQ(+$('#qn').value,$('#qmode').value,$('#qdom').value);return;
+    case 'startq-form':startQ(+$('#qn').value,$('#qmode').value,$('#qdom').value,$('#qsource').value);return;
     case 'mock':if(confirm(`50문제, ${MOCK.min}분 모의고사를 시작할까요?`))startMock();return;
     case 'ans':answer(+b.dataset.i);return;
     case 'next':nextQ();return;
@@ -744,6 +750,7 @@ document.addEventListener('click',async e=>{
     case 'saveset':
       S.exam=$('#s-exam').value;S.goal=Math.max(1,+$('#s-goal').value||10);S.key=$('#s-key').value.trim();S.model=$('#s-model').value.trim()||'gpt-4o-mini';
       save();toast('저장했어요.');render();return;
+    case 'reuse-vapid':{const pub=$('#vapid-existing').value.trim();let bytes;try{bytes=u8(pub)}catch(_){toast('공개키 형식을 확인해 주세요.');return}if(bytes.length!==65||bytes[0]!==4){toast('올바른 VAPID 공개키를 입력해 주세요.');return}S.vapidPub=pub;ui.priv='';ui.sub='';save();toast('기존 공개키를 적용했어요. 이제 이 기기 알림을 켜 주세요.');render();return}
     case 'vapid':
       if(S.vapidPub&&!confirm('키를 새로 만들면 GitHub에 등록한 값과 모든 기기의 알림 등록을 다시 해야 해요. 계속할까요?'))return;
       await genVapid();render();return;
@@ -773,7 +780,7 @@ document.addEventListener('keydown',e=>{
   if(/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;
   if(e.target.tagName==='BUTTON'&&(e.key==='Enter'||e.key===' '))return;
   if(tab==='quiz'&&qs&&!qs.done){
-    if(qs.picked===null&&/^[1-4]$/.test(e.key)&&+e.key<=qs.perm.length)answer(+e.key-1);
+    if(qs.picked===null&&/^[1-8]$/.test(e.key)&&+e.key<=qs.perm.length)answer(+e.key-1);
     else if(qs.picked!==null&&e.key==='Enter')nextQ();
   }else if(tab==='cards'&&cs&&!cs.done&&(e.key===' '||e.key==='Enter')){
     e.preventDefault();if(!cs.shown){cs.shown=true;render()}
@@ -796,7 +803,7 @@ const hadData=S.qs.length>0;
 const added=mergeBank();
 applyFreezes();
 save();
-if(added&&hadData)toast(`기본 문제 ${added}개를 추가했어요.`);
+if(added&&hadData)toast(`문제 ${added}개를 추가했어요.`);
 render();
 dbAll().then(f=>{FILES=f;if(tab==='src')render()}).catch(()=>{});
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').then(()=>localRemind()).catch(()=>{});
