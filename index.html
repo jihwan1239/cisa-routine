@@ -70,6 +70,15 @@ label{display:block;margin:14px 0 4px;font-size:.9rem;color:var(--muted)}
 .warn{border-color:var(--bad);background:var(--bad-bg)}
 .ai{white-space:pre-wrap;border-top:1px solid var(--line);padding-top:10px;margin-top:10px}
 .face{font-size:1.2rem;line-height:1.6;min-height:120px;display:flex;align-items:center;word-break:keep-all;white-space:pre-wrap}
+.lesson-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.lesson-num{flex:none;font-size:.78rem;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:3px 9px}
+.term-list{display:grid;gap:12px;margin-top:16px}
+.term{border-left:3px solid var(--frz);padding-left:12px}
+.term strong{display:block;margin-bottom:2px}
+.blank{font-size:1.08rem;line-height:1.75;word-break:keep-all}
+.blank-mark{display:inline-block;min-width:72px;border-bottom:2px solid var(--ink);text-align:center;font-weight:700}
+.learn-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.learn-meta span{font-size:.78rem;color:var(--muted);background:var(--bg);border-radius:999px;padding:3px 9px}
 /* 연속 기록 */
 .streak{display:flex;align-items:center;gap:14px}
 .streak .fl{font-size:2.6rem;line-height:1;filter:grayscale(1);opacity:.45}
@@ -120,7 +129,7 @@ ol.steps li{margin:6px 0;word-break:keep-all}
 <nav class="tabs" aria-label="메뉴">
   <button data-act="tab" data-t="today">오늘</button>
   <button data-act="tab" data-t="quiz">문제</button>
-  <button data-act="tab" data-t="cards">카드</button>
+  <button data-act="tab" data-t="cards">학습</button>
   <button data-act="tab" data-t="src">자료</button>
   <button data-act="tab" data-t="set">설정</button>
 </nav>
@@ -141,6 +150,7 @@ function CISA_BANK_ADD(d,arr,t){arr.forEach((x,i)=>CISA_BANK.push({id:'b'+d+(t||
 <script src="bank-n4b.js"></script>
 <script src="bank-n5.js"></script>
 <script src="bank-pdf-ko.js"></script>
+<script src="bank-learn.js"></script>
 
 <script>
 /* ---------- 기본 상수와 도구 ---------- */
@@ -168,10 +178,12 @@ const u8=s=>{s=s.replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';ret
 
 const mkQ=(d,q,ch,a,ex,src)=>({id:uid(),d,q,ch,a,ex,box:0,due:dkey(),seen:0,right:0,last:null,src:src||''});
 const mkC=(d,f,b,src)=>({id:uid(),d,f,b,box:0,due:dkey(),seen:0,src:src||''});
+const mkBlank=b=>({...b,box:0,due:dkey(),seen:0,right:0,last:null,lastDay:''});
+const mkLesson=x=>({id:x.id,d:x.d,title:x.title,intro:x.intro,terms:x.terms,src:x.src||'',readCount:0,readAt:'',readMin:0,blanks:x.blanks.map(mkBlank)});
 
 /* ---------- 저장소 ---------- */
 function seed(){
-  const S0={exam:'',goal:10,key:'',model:'gpt-4o-mini',qs:[],cards:[],log:{},reads:{}};
+  const S0={exam:'',goal:10,key:'',model:'gpt-4o-mini',qs:[],cards:[],lessons:[],log:{},reads:{}};
   const C=(d,f,b)=>S0.cards.push(mkC(d,f,b,'예제'));
   C(1,'고유위험, 통제위험, 적발위험','고유위험은 통제가 없을 때의 위험, 통제위험은 내부통제가 놓칠 위험, 적발위험은 감사인이 절차로도 못 찾을 위험입니다. 감사인이 조절할 수 있는 것은 적발위험뿐입니다.');
   C(1,'속성 표본과 변수 표본','속성 표본은 통제 이탈률(준거성 테스트), 변수 표본은 금액이나 수량 추정(실증 테스트)에 씁니다.');
@@ -193,7 +205,7 @@ function load(){
   let s=null;
   try{s=JSON.parse(localStorage.getItem(KEY))}catch(e){}
   if(!s||!s.qs)s=seed();
-  s.reads=s.reads||{};s.log=s.log||{};s.cards=s.cards||[];s.goal=s.goal||10;s.model=s.model||'gpt-4o-mini';
+  s.reads=s.reads||{};s.log=s.log||{};s.cards=s.cards||[];s.lessons=s.lessons||[];s.goal=s.goal||10;s.model=s.model||'gpt-4o-mini';
   s.frozen=s.frozen||{};s.freezes=s.freezes||0;s.remindHour=s.remindHour==null?21:s.remindHour;
   return s;
 }
@@ -215,6 +227,19 @@ function mergeBank(){
   return n;
 }
 
+/* 이론 은행 합치기: 읽기·빈칸 진도는 유지하고 본문은 최신으로 */
+function mergeLearnBank(){
+  const map=new Map(S.lessons.map(x=>[x.id,x]));let n=0;
+  (window.CISA_LEARN_BANK||[]).forEach(b=>{
+    const e=map.get(b.id);
+    if(!e){S.lessons.push(mkLesson(b));n++;return}
+    e.d=b.d;e.title=b.title;e.intro=b.intro;e.terms=b.terms;e.src=b.src||e.src;
+    const bm=new Map((e.blanks||[]).map(x=>[x.id,x]));
+    e.blanks=b.blanks.map(x=>Object.assign(mkBlank(x),bm.get(x.id)||{},x));
+  });
+  return n;
+}
+
 /* IndexedDB: PDF 원문(files)과 알림용 학습 상태(meta) */
 const idb=()=>new Promise((res,rej)=>{const r=indexedDB.open('cisa-routine',2);
   r.onupgradeneeded=()=>{const d=r.result;if(!d.objectStoreNames.contains('files'))d.createObjectStore('files',{keyPath:'name'});if(!d.objectStoreNames.contains('meta'))d.createObjectStore('meta',{keyPath:'id'})};
@@ -225,7 +250,7 @@ async function dbDel(n){const d=await idb();return new Promise((res,rej)=>{const
 let FILES=[];
 
 /* ---------- 연속 기록 ---------- */
-const studied=k=>{const l=S.log[k];return !!l&&(l.q>0||l.min>=1||l.cards>0)};
+const studied=k=>{const l=S.log[k];return !!l&&(l.q>0||l.min>=1||l.cards>0||l.learn>0||l.blanks>0)};
 const alive=k=>studied(k)||!!S.frozen[k];
 function chainFrom(k){let n=0;while(alive(k)){n++;k=addDays(k,-1)}return n}
 function streakN(){const t=dkey();return alive(t)?chainFrom(t):chainFrom(addDays(t,-1))}
@@ -256,12 +281,14 @@ async function writeStatus(){
 }
 
 /* ---------- 상태 ---------- */
-let tab='today', qs=null, cs=null, ui={gen:null,read:null,page:1,prog:'',notice:'',award:false,priv:'',sub:''};
+let tab='today', qs=null, cs=null, ls=null, ui={gen:null,read:null,page:1,prog:'',notice:'',award:false,priv:'',sub:'',lesson:null,lessonT:0};
 const qItem=()=>S.qs.find(x=>x.id===qs.ids[qs.i]);
 const cItem=()=>S.cards.find(x=>x.id===cs.ids[cs.i]);
+const lessonById=id=>S.lessons.find(x=>x.id===id);
+const blankItem=()=>{const [lid,bid]=ls.ids[ls.i].split('|'),l=lessonById(lid);return{l,b:l.blanks.find(x=>x.id===bid)}};
 
 function toast(m){const old=$('.toast');if(old)old.remove();const t=document.createElement('div');t.className='toast';t.setAttribute('role','status');t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),3400)}
-function logAdd(min,q,right,cards=0){const k=dkey();const l=S.log[k]||(S.log[k]={min:0,q:0,right:0,cards:0});l.min+=min;l.q+=q;l.right+=right;l.cards=(l.cards||0)+cards;awardFreeze();save()}
+function logAdd(min,q,right,cards=0,learn=0,blanks=0){const k=dkey();const l=S.log[k]||(S.log[k]={min:0,q:0,right:0,cards:0,learn:0,blanks:0});l.min+=min;l.q+=q;l.right+=right;l.cards=(l.cards||0)+cards;l.learn=(l.learn||0)+learn;l.blanks=(l.blanks||0)+blanks;awardFreeze();save()}
 function domStats(){return DOMAINS.map(d=>{const it=S.qs.filter(x=>x.d==d.id);const seen=it.filter(x=>x.seen>0);const tot=seen.reduce((a,x)=>a+x.seen,0),right=seen.reduce((a,x)=>a+x.right,0);return{...d,total:it.length,seen:seen.length,acc:tot?right/tot:null}})}
 
 /* ---------- 문제 세션 ---------- */
@@ -280,8 +307,8 @@ function pickNew(pool,n){
   return res;
 }
 function sourceMatch(x,source){return source==='all'||(source==='pdf'?x.kind==='pdf':x.kind!=='pdf')}
-function buildQ(n,mode,dom,source='all'){
-  const t=dkey(),pool=S.qs.filter(x=>(dom==='all'||x.d==dom)&&sourceMatch(x,source)),out=[];
+function buildQ(n,mode,dom,source='all',allowToday=false){
+  const t=dkey(),pool=S.qs.filter(x=>(dom==='all'||x.d==dom)&&sourceMatch(x,source)&&(allowToday||x.lastDay!==t)),out=[];
   const take=a=>{for(const x of a){if(out.length>=n)break;if(!out.includes(x.id))out.push(x.id)}};
   if(mode==='wrong'){take(shuffle(pool.filter(x=>x.seen>0&&x.last===0)));return out}
   if(mode==='new'){take(pickNew(pool,n));return out}
@@ -297,12 +324,13 @@ function newSession(ids,mock){
 }
 function startQ(n,mode='auto',dom='all',source='all'){
   const ids=buildQ(n,mode,dom,source);
-  if(!ids.length){toast(mode==='wrong'?'다시 풀 오답이 없어요.':'풀 문제가 없어요.');return}
+  if(!ids.length){toast(mode==='wrong'?'오늘 풀지 않은 오답이 없어요.':'선택한 범위의 남은 문제는 오늘 모두 풀었어요.');return}
   newSession(ids,false);
 }
 function startMock(){
   let ids=[];
-  DOMAINS.forEach((d,i)=>{ids=ids.concat(shuffle(S.qs.filter(x=>x.d==d.id)).slice(0,MOCK.n[i]).map(x=>x.id))});
+  const t=dkey();
+  DOMAINS.forEach((d,i)=>{ids=ids.concat(shuffle(S.qs.filter(x=>x.d==d.id&&x.lastDay!==t)).slice(0,MOCK.n[i]).map(x=>x.id))});
   if(ids.length<10){toast('모의고사를 만들 문제가 부족해요.');return}
   newSession(shuffle(ids),true);
 }
@@ -313,7 +341,7 @@ function answer(d){
   qs.picked=d;qs.active+=dt;it.seen++;
   if(ok){it.right++;qs.right++}else qs.wrong.push(it.id);
   qs.res.push({d:it.d,ok});
-  it.last=ok?1:0;it.box=ok?Math.min((it.box||0)+1,5):0;it.due=addDays(dkey(),INT[it.box]);
+  it.last=ok?1:0;it.lastDay=dkey();it.box=ok?Math.min((it.box||0)+1,5):0;it.due=addDays(dkey(),ok?INT[it.box]:1);
   logAdd(dt,1,ok?1:0);render();
 }
 function nextQ(){if(qs.i+1>=qs.ids.length){qs.done=true}else{qs.i++;prepQ()}render(true)}
@@ -335,10 +363,69 @@ function startC(n){
 function rateC(ok){
   const c=cItem(),dt=Math.min(Date.now()-cs.t0,120000)/60000;
   cs.active+=dt;c.seen++;if(ok)cs.known++;
-  c.box=ok?Math.min((c.box||0)+1,5):0;c.due=addDays(dkey(),INT[c.box]);
+  c.box=ok?Math.min((c.box||0)+1,5):0;c.due=addDays(dkey(),ok?INT[c.box]:1);
   logAdd(dt,0,0,1);
   if(cs.i+1>=cs.ids.length)cs.done=true;else{cs.i++;cs.shown=false;cs.t0=Date.now()}
   render(true);
+}
+
+/* ---------- 이론 읽기와 빈칸 복습 ---------- */
+function lessonStats(l){
+  const bs=l.blanks||[],seen=bs.filter(x=>x.seen>0),tries=seen.reduce((a,x)=>a+x.seen,0),right=seen.reduce((a,x)=>a+x.right,0);
+  return{total:bs.length,seen:seen.length,acc:tries?right/tries:null};
+}
+function chooseLesson(){
+  const unread=S.lessons.filter(x=>!x.readAt);if(!unread.length)return null;
+  const st={};domStats().forEach(x=>st[x.id]=x);
+  const weights=unread.map(x=>st[x.d].w*(1.5-(st[x.d].acc==null?.5:st[x.d].acc)));
+  let r=Math.random()*weights.reduce((a,b)=>a+b,0),i=0;
+  while(r>weights[i]&&i<unread.length-1){r-=weights[i];i++}
+  return unread[i];
+}
+function openLesson(id){
+  const l=id?lessonById(id):chooseLesson();
+  if(!l){toast('모든 기본 이론을 한 번 이상 읽었어요. 학습 탭에서 다시 읽을 단원을 골라 주세요.');return}
+  ui.lesson=l.id;ui.lessonT=Date.now();tab='cards';render(true);
+}
+function completeLesson(startBlank=false){
+  const l=lessonById(ui.lesson);if(!l)return;
+  const dt=Math.max(.1,Math.min((Date.now()-(ui.lessonT||Date.now()))/60000,20));
+  l.readCount=(l.readCount||0)+1;l.readAt=dkey();l.readMin=(l.readMin||0)+dt;
+  logAdd(dt,0,0,0,1,0);ui.lesson=null;ui.lessonT=0;
+  if(startBlank)startBlankSession(5,l.id);else{toast('읽은 이론의 빈칸이 복습 대상에 추가됐어요.');render(true)}
+}
+function availableBlanks(lessonId){
+  const t=dkey(),out=[];
+  S.lessons.filter(l=>l.readAt&&(!lessonId||l.id===lessonId)).forEach(l=>(l.blanks||[]).forEach(b=>{
+    if(b.lastDay!==t)out.push({l,b,id:l.id+'|'+b.id});
+  }));
+  return out;
+}
+function buildBlanks(n,lessonId){
+  const t=dkey(),pool=availableBlanks(lessonId),out=[];
+  const take=a=>{for(const x of a){if(out.length>=n)break;if(!out.includes(x.id))out.push(x.id)}};
+  take(pool.filter(x=>x.b.seen>0&&x.b.due<=t).sort((a,b)=>a.b.due<b.b.due?-1:1));
+  take(shuffle(pool.filter(x=>!x.b.seen)));
+  take(pool.filter(x=>x.b.seen>0).sort((a,b)=>a.b.box-b.b.box));
+  return out;
+}
+function prepBlank(){
+  const {b}=blankItem();ls.perm=shuffle(b.choices.map((_,i)=>i));ls.picked=null;ls.t0=Date.now();
+}
+function startBlankSession(n,lessonId=''){
+  const ids=buildBlanks(n,lessonId);
+  if(!ids.length){toast('오늘 풀지 않은 빈칸이 없어요. 이론을 더 읽거나 내일 복습해 주세요.');ui.lesson=null;render(true);return}
+  ls={ids,i:0,right:0,active:0,done:false,res:[],was:studied(dkey()),perm:[],picked:null,t0:Date.now()};
+  ui.lesson=null;prepBlank();tab='cards';render(true);
+}
+function answerBlank(i){
+  if(!ls||ls.done||ls.picked!==null)return;
+  const {b}=blankItem(),ok=ls.perm[i]===b.choices.indexOf(b.answer),dt=Math.min(Date.now()-ls.t0,120000)/60000;
+  ls.picked=i;ls.active+=dt;ls.res.push(ok);if(ok){ls.right++;b.right++}b.seen++;b.last=ok?1:0;b.lastDay=dkey();b.box=ok?Math.min((b.box||0)+1,5):0;b.due=addDays(dkey(),ok?INT[b.box]:1);
+  logAdd(dt,0,0,0,0,1);render();
+}
+function nextBlank(){
+  if(ls.i+1>=ls.ids.length)ls.done=true;else{ls.i++;prepBlank()}render(true);
 }
 
 /* ---------- OpenAI ---------- */
@@ -376,13 +463,23 @@ async function runGen(btn){
         `문제 ${n}개를 만들어 주세요. ${dnote}\n출력 형식: {"items":[{"d":1,"q":"질문","ch":["보기1","보기2","보기3","보기4"],"a":0,"ex":"정답 근거와 오답이 틀린 이유"}]}\na는 정답 보기의 인덱스(0~3)입니다.\n\n[자료]\n${text}`);
       parseJ(raw).filter(x=>x&&typeof x.q==='string'&&Array.isArray(x.ch)&&x.ch.length===4&&Number.isInteger(x.a)&&x.a>=0&&x.a<4)
        .forEach(x=>{S.qs.push(mkQ(dm==='auto'?clampD(x.d):+dm,x.q,x.ch.map(String),x.a,String(x.ex||''),src));added++});
+    }else if(kind==='learn'){
+      const raw=await gpt('당신은 CISA 시험 준비용 이론 학습 단원을 만드는 튜터입니다. 주어진 자료만 근거로 핵심 이론을 자신의 문장으로 정리하고, 이론을 읽은 뒤 풀 수 있는 가벼운 3지선다 빈칸을 만듭니다. 한국어로 쓰되 핵심 용어는 영어를 병기합니다. 반드시 JSON만 출력합니다.',
+        `이론 단원 ${n}개를 만들어 주세요. ${dnote}\n출력 형식: {"items":[{"d":1,"title":"단원 제목","intro":"학습 목적 2문장","terms":[{"term":"핵심어","definition":"정확한 설명"}],"blanks":[{"prompt":"정답 자리를 ___로 쓴 문장","answer":"정답","choices":["정답","오답1","오답2"]}]}]}\n각 단원은 terms 5~8개와 blanks 5~8개를 포함하고, 모든 answer는 choices에 정확히 한 번 포함해야 합니다.\n\n[자료]\n${text}`);
+      parseJ(raw).filter(x=>x&&x.title&&x.intro&&Array.isArray(x.terms)&&x.terms.length>=3&&Array.isArray(x.blanks)&&x.blanks.length>=3).forEach(x=>{
+        const bs=x.blanks.filter(b=>b&&typeof b.prompt==='string'&&b.prompt.includes('___')&&typeof b.answer==='string'&&Array.isArray(b.choices)&&b.choices.length===3&&b.choices.filter(c=>String(c)===b.answer).length===1);
+        if(bs.length<3)return;
+        const id='learn-user-'+uid();
+        S.lessons.push(mkLesson({id,d:dm==='auto'?clampD(x.d):+dm,title:String(x.title),intro:String(x.intro),terms:x.terms.filter(t=>t&&t.term&&t.definition).map(t=>({term:String(t.term),definition:String(t.definition)})),blanks:bs.map((b,i)=>({id:id+'-b'+(i+1),prompt:String(b.prompt),answer:String(b.answer),choices:b.choices.map(String)})),src}));added++;
+      });
     }else{
       const raw=await gpt('당신은 CISA 시험 준비용 암기 카드를 만드는 튜터입니다. 주어진 자료 본문만 근거로 하고, 한국어로 쓰되 핵심 용어는 영어를 병기합니다. 반드시 JSON만 출력합니다.',
         `카드 ${n}장을 만들어 주세요. ${dnote}\n출력 형식: {"items":[{"d":1,"f":"용어 또는 질문","b":"두 문장 이내의 답"}]}\n\n[자료]\n${text}`);
       parseJ(raw).filter(x=>x&&x.f&&x.b).forEach(x=>{S.cards.push(mkC(dm==='auto'?clampD(x.d):+dm,String(x.f),String(x.b),src));added++});
     }
     save();
-    toast(added?`${kind==='q'?'문제':'카드'} ${added}${kind==='q'?'개':'장'}를 추가했어요.${cut?' (앞 9000자만 사용했어요)':''}`:'쓸 만한 결과가 없어요. 다시 시도해 주세요.');
+    const label=kind==='q'?'문제':kind==='learn'?'이론 단원':'카드';
+    toast(added?`${label} ${added}${kind==='c'?'장':'개'}를 추가했어요.${cut?' (앞 9000자만 사용했어요)':''}`:'쓸 만한 결과가 없어요. 다시 시도해 주세요.');
   }catch(err){toast(err.message)}
   render();
 }
@@ -486,7 +583,9 @@ function vToday(){
   else head=st?'오늘 5문제만 풀면 연속 기록이 이어져요.':'오늘 첫 5문제로 연속 기록을 시작해요.';
   let dd='';
   if(S.exam){const n=Math.round((new Date(S.exam+'T00:00:00')-new Date(t+'T00:00:00'))/864e5);dd=n>=0?`시험까지 ${n}일 남았어요.`:'설정한 시험일이 지났어요.'}
-  const dueQ=S.qs.filter(x=>x.seen>0&&x.due<=t).length,dueC=S.cards.filter(x=>x.seen>0&&x.due<=t).length,wrongN=S.qs.filter(x=>x.last===0).length;
+  const dueQ=S.qs.filter(x=>x.seen>0&&x.due<=t&&x.lastDay!==t).length;
+  const dueB=S.lessons.filter(x=>x.readAt).flatMap(x=>x.blanks).filter(x=>x.seen>0&&x.due<=t&&x.lastDay!==t).length;
+  const unread=S.lessons.filter(x=>!x.readAt).length,wrongN=S.qs.filter(x=>x.last===0).length;
   const notice=ui.notice;ui.notice='';
   return `${notice?`<div class="panel" style="border-color:var(--frz);background:var(--frz-bg)"><p style="margin:0">❄ ${esc(notice)}</p></div>`:''}
   ${risk?`<div class="panel warn"><strong>오늘 안 하면 ${st}일 연속 기록이 끊겨요.</strong><p class="muted" style="margin:4px 0 0">${S.freezes?`보호권이 ${S.freezes}개 있어서 하루는 버틸 수 있지만, 아껴 두는 게 좋아요.`:'남은 보호권이 없어요.'}</p></div>`:''}
@@ -503,8 +602,8 @@ function vToday(){
     <button class="btn" data-act="startq" data-n="10">10문제</button>
     <button class="btn" data-act="startq" data-n="20">20문제</button>
   </div>
-  <div class="row"><button class="btn ghost" data-act="startc" data-n="10">카드 복습 (대기 ${dueC}장)</button></div>
-  <p class="muted">다시 볼 문제 ${dueQ}개, 직전에 틀린 문제 ${wrongN}개예요.</p>
+  <div class="row"><button class="btn ghost" data-act="today-lesson">오늘의 이론 읽기${unread?` (${unread}개 남음)`:''}</button><button class="btn ghost" data-act="startblank" data-n="10">빈칸 복습${dueB?` (${dueB})`:''}</button></div>
+  <p class="muted">오늘 풀지 않은 복습 문제 ${dueQ}개, 직전에 틀린 문제 ${wrongN}개예요. 같은 문제는 하루에 한 번만 나옵니다.</p>
   <h2>학습 기록</h2>
   <div class="panel">${ledger()}<p class="muted" style="margin:12px 0 0">체크는 공부한 날, 초록 칸은 하루 목표를 채운 날, 파란 칸은 보호권으로 지킨 날이에요. 7일 연속마다 보호권이 1개 생기고(최대 2개), 하루를 놓치면 자동으로 쓰여요.</p></div>
   <h2>도메인별 정답률</h2>
@@ -568,42 +667,51 @@ function vQDone(){
 }
 function vCards(){
   const t=dkey();
+  if(ui.lesson){
+    const l=lessonById(ui.lesson),dn=DOMAINS.find(x=>x.id===l.d),st=lessonStats(l);
+    return `<div class="row between" style="margin-top:0"><button class="link" data-act="lesson-close">학습 목록</button><span class="muted">도메인 ${l.d}</span></div>
+    <p class="muted">${esc(dn.name)}</p><h1>${esc(l.title)}</h1><p>${esc(l.intro)}</p>
+    <div class="panel"><div class="term-list">${l.terms.map(x=>`<div class="term"><strong>${esc(x.term)}</strong><span>${esc(x.definition)}</span></div>`).join('')}</div></div>
+    <p class="muted">천천히 읽은 뒤 빈칸으로 바로 확인해 보세요. 이 단원을 읽어야 해당 빈칸이 복습에 나옵니다.</p>
+    <div class="row"><button class="btn ghost" data-act="lesson-done">읽기 완료</button><button class="btn" data-act="lesson-blank">완료하고 빈칸 5개</button></div>
+    <p class="muted">빈칸 진도 ${st.seen}/${st.total} · ${st.acc==null?'아직 풀이 없음':`정답률 ${Math.round(st.acc*100)}%`}</p>`;
+  }
+  if(ls&&!ls.done){
+    const {l,b}=blankItem(),pk=ls.picked!==null,correct=b.choices.indexOf(b.answer),ok=pk&&ls.perm[ls.picked]===correct;
+    return `<div class="row between" style="margin-top:0"><span class="muted">빈칸 ${ls.i+1} / ${ls.ids.length}</span><button class="link" data-act="blank-quit">그만하기</button></div>
+    <div class="bar"><i style="width:${(ls.i+(pk?1:0))/ls.ids.length*100}%"></i></div>
+    <p class="muted" style="margin-top:14px">도메인 ${l.d} · ${esc(l.title)}</p>
+    <div class="panel blank">${esc(b.prompt).replace('___','<span class="blank-mark">?</span>')}</div>
+    ${ls.perm.map((o,i)=>{let c='ch';if(pk){if(o===correct)c+=' right';else if(i===ls.picked)c+=' wrong'}return `<button class="${c}" data-act="blank-ans" data-i="${i}" ${pk?'disabled':''}><b>${'①②③'[i]}</b><span>${esc(b.choices[o])}</span></button>`}).join('')}
+    ${pk?`<div class="panel fb ${ok?'ok':'bad'}"><strong>${ok?'정답이에요':'다음 날 다시 나와요'}</strong><p style="margin:6px 0 0">빈칸의 답은 <b>${esc(b.answer)}</b>입니다.</p></div><button class="btn" data-act="blank-next" style="width:100%">${ls.i+1>=ls.ids.length?'결과 보기':'다음 빈칸'}</button>`:''}`;
+  }
+  if(ls&&ls.done){
+    return `${celebrate(ls.was)}<h1>${ls.ids.length}개 중 ${ls.right}개를 맞혔어요.</h1><p class="muted">이번에 ${fmt(ls.active)} 공부했어요. 틀린 빈칸은 다음 날, 맞힌 빈칸은 1·3·7·14·30일 간격으로 복습합니다.</p><div class="row"><button class="btn ghost" data-act="learn-home">학습 목록</button><button class="btn" data-act="end">오늘 화면으로</button></div>`;
+  }
   if(cs&&!cs.done){
     const c=cItem(),dn=DOMAINS.find(d=>d.id==c.d);
-    return `<div class="row between" style="margin-top:0"><span class="muted">${cs.i+1} / ${cs.ids.length}</span><button class="link" data-act="cquit">그만하기</button></div>
-    <div class="bar"><i style="width:${cs.i/cs.ids.length*100}%"></i></div>
-    <p class="muted" style="margin-top:14px">도메인 ${c.d}. ${esc(dn?dn.name:'')}</p>
-    <div class="panel face">${esc(c.f)}</div>
-    ${cs.shown?`<div class="panel face" style="font-size:1.02rem;min-height:0;border-color:var(--ok)">${esc(c.b)}</div>
-      <div class="row"><button class="btn ghost" data-act="cagain">헷갈려요</button><button class="btn" data-act="cok">알았어요</button></div>`
-      :`<div class="row"><button class="btn" data-act="cflip">답 보기</button></div>`}`;
+    return `<div class="row between" style="margin-top:0"><span class="muted">직접 만든 카드 ${cs.i+1} / ${cs.ids.length}</span><button class="link" data-act="cquit">그만하기</button></div><div class="bar"><i style="width:${cs.i/cs.ids.length*100}%"></i></div><p class="muted" style="margin-top:14px">도메인 ${c.d}. ${esc(dn?dn.name:'')}</p><div class="panel face">${esc(c.f)}</div>${cs.shown?`<div class="panel face" style="font-size:1.02rem;min-height:0;border-color:var(--ok)">${esc(c.b)}</div><div class="row"><button class="btn ghost" data-act="cagain">헷갈려요</button><button class="btn" data-act="cok">알았어요</button></div>`:`<button class="btn" data-act="cflip" style="width:100%">답 보기</button>`}`;
   }
   if(cs&&cs.done){
-    return `${celebrate(cs.was)}<h1>${cs.i+1}장 중 ${cs.known}장을 알았어요.</h1><p class="muted">이번에 ${fmt(cs.active)} 썼어요. 헷갈린 카드는 내일 다시 나와요.</p>
-    <div class="row"><button class="btn" data-act="end">오늘 화면으로</button></div>`;
+    return `${celebrate(cs.was)}<h1>${cs.i+1}장 중 ${cs.known}장을 알았어요.</h1><p class="muted">이번에 ${fmt(cs.active)} 썼어요.</p><div class="row"><button class="btn ghost" data-act="learn-home">학습 목록</button><button class="btn" data-act="end">오늘 화면으로</button></div>`;
   }
-  const due=S.cards.filter(x=>x.seen>0&&x.due<=t).length,nw=S.cards.filter(x=>!x.seen).length;
-  return `<h1>카드 복습</h1>
-  <p class="muted">앞면을 보고 답을 먼저 떠올린 다음 뒷면을 확인하세요.</p>
-  <div class="panel"><p>전체 ${S.cards.length}장, 복습 대기 ${due}장, 새 카드 ${nw}장이에요.</p>
-  <div class="row"><button class="btn" data-act="startc" data-n="10">10장 시작</button><button class="btn ghost" data-act="startc" data-n="20">20장 시작</button></div></div>
-  <h2>카드 추가</h2>
-  <div class="panel">
-    <label for="nc-d">도메인</label><select id="nc-d">${DOMAINS.map(d=>`<option value="${d.id}">${d.id}. ${d.name}</option>`).join('')}</select>
-    <label for="nc-f">앞면</label><textarea id="nc-f"></textarea>
-    <label for="nc-b">뒷면</label><textarea id="nc-b"></textarea>
-    <button class="btn" data-act="addcard" style="width:100%;margin-top:16px">카드 추가</button>
-  </div>`;
+  const read=S.lessons.filter(x=>x.readAt).length,totalB=S.lessons.reduce((a,x)=>a+x.blanks.length,0),seenB=S.lessons.reduce((a,x)=>a+x.blanks.filter(b=>b.seen).length,0);
+  const dueB=S.lessons.filter(x=>x.readAt).flatMap(x=>x.blanks).filter(x=>x.seen>0&&x.due<=t&&x.lastDay!==t).length;
+  const dueC=S.cards.filter(x=>x.seen>0&&x.due<=t).length;
+  return `<h1>이론과 빈칸 학습</h1><p class="muted">이론을 먼저 읽고, 핵심어가 빠진 문장에서 보기 3개 중 답을 고릅니다.</p>
+  <div class="panel"><div class="lesson-head"><div><strong>기본 이론 ${S.lessons.length}개</strong><p class="muted" style="margin:4px 0 0">읽음 ${read}/${S.lessons.length} · 빈칸 ${seenB}/${totalB} · 복습 대기 ${dueB}</p></div><span class="lesson-num">도메인별 6개</span></div><div class="row"><button class="btn" data-act="today-lesson">오늘의 이론 읽기</button><button class="btn ghost" data-act="startblank" data-n="10">빈칸 10개</button></div></div>
+  ${DOMAINS.map(d=>`<h2>${d.id}. ${esc(d.name)}</h2>${S.lessons.filter(l=>l.d===d.id).map((l,i)=>{const st=lessonStats(l);return `<div class="panel"><div class="lesson-head"><div><strong>${i+1}. ${esc(l.title)}</strong><div class="learn-meta"><span>${l.readAt?'읽음 '+l.readAt:'읽기 전'}</span><span>빈칸 ${st.seen}/${st.total}</span><span>${st.acc==null?'정답률 -':Math.round(st.acc*100)+'%'}</span></div></div><button class="btn ghost" data-act="lesson-open" data-id="${l.id}" style="flex:none">${l.readAt?'다시 읽기':'읽기'}</button></div></div>`}).join('')}`).join('')}
+  <details><summary>직접 만든 카드 (${S.cards.length}장 · 복습 대기 ${dueC})</summary><div class="panel"><p class="muted">기존 카드와 직접 추가한 카드는 여기에 보관됩니다.</p><div class="row"><button class="btn ghost" data-act="startc" data-n="10">카드 10장</button><button class="btn ghost" data-act="startc" data-n="20">카드 20장</button></div><label for="nc-d">도메인</label><select id="nc-d">${DOMAINS.map(d=>`<option value="${d.id}">${d.id}. ${d.name}</option>`).join('')}</select><label for="nc-f">앞면</label><textarea id="nc-f"></textarea><label for="nc-b">뒷면</label><textarea id="nc-b"></textarea><button class="btn ghost" data-act="addcard" style="width:100%;margin-top:16px">카드 추가</button></div></details>`;
 }
 function vGen(f){
   const last=S.reads[f.name]||1;
   return `<div style="border-top:1px solid var(--line);margin-top:14px;padding-top:6px">
   <div class="row" style="margin:0"><div style="flex:1"><label for="g-a">시작 쪽</label><input id="g-a" type="number" min="1" max="${f.pages.length}" value="${last}"></div>
   <div style="flex:1"><label for="g-b">끝 쪽</label><input id="g-b" type="number" min="1" max="${f.pages.length}" value="${Math.min(f.pages.length,last+2)}"></div></div>
-  <div class="row" style="margin:0"><div style="flex:1"><label for="g-k">종류</label><select id="g-k"><option value="q">문제</option><option value="c">카드</option></select></div>
+  <div class="row" style="margin:0"><div style="flex:1"><label for="g-k">종류</label><select id="g-k"><option value="q">문제</option><option value="learn">이론 정리와 빈칸</option><option value="c">직접 만든 카드</option></select></div>
   <div style="flex:1"><label for="g-n">개수</label><select id="g-n"><option>3</option><option selected>5</option><option>8</option></select></div></div>
   <label for="g-d">도메인</label><select id="g-d"><option value="auto">AI가 판단</option>${DOMAINS.map(d=>`<option value="${d.id}">${d.id}. ${d.name}</option>`).join('')}</select>
-  <p class="muted" style="margin-top:10px">선택한 쪽의 글이 OpenAI로 전송돼요. 한 번에 9000자까지만 사용해요.</p>
+  <p class="muted" style="margin-top:10px">선택한 쪽의 글이 OpenAI로 전송돼요. 개인적이거나 민감한 노트는 사용하지 마세요. 한 번에 9000자까지만 사용해요.</p>
   <div class="row"><button class="btn ghost" data-act="gclose">닫기</button><button class="btn" data-act="grun">만들기</button></div></div>`;
 }
 function vSources(){
@@ -668,7 +776,7 @@ function vSettings(){
   ${vPush()}
   <h2>데이터</h2>
   <div class="panel">
-    <p class="muted">기록과 문제는 이 브라우저 안에만 있어요. 가끔 백업하세요. 백업에는 API 키와 PDF 원문은 들어가지 않아요.</p>
+    <p class="muted">기록, 문제, 이론과 빈칸 진도는 이 브라우저 안에만 있어요. 가끔 백업하세요. 백업에는 API 키와 PDF 원문은 들어가지 않아요.</p>
     <div class="row"><button class="btn ghost" data-act="export">백업 내려받기</button></div>
     <label for="impbackup">백업 불러오기 (현재 데이터를 덮어써요)</label><input type="file" id="impbackup" accept="application/json">
     <label for="impitems">문제와 카드 가져오기 (기존 데이터에 추가해요)</label><input type="file" id="impitems" accept="application/json">
@@ -713,9 +821,19 @@ document.addEventListener('click',async e=>{
     case 'ans':answer(+b.dataset.i);return;
     case 'next':nextQ();return;
     case 'quit':if(!qs.mock||confirm('지금 제출할까요? 안 푼 문제는 채점하지 않아요.')){qs.done=true;render(true)}return;
-    case 'again-wrong':startQ(10,'wrong');return;
-    case 'end':qs=null;cs=null;tab='today';render(true);return;
+    case 'again-wrong':{const ids=[...new Set(qs.wrong)].slice(0,10);if(ids.length)newSession(ids,false);return}
+    case 'end':qs=null;cs=null;ls=null;ui.lesson=null;ui.lessonT=0;tab='today';render(true);return;
     case 'ai':await aiExplain();return;
+    case 'today-lesson':openLesson();return;
+    case 'lesson-open':openLesson(b.dataset.id);return;
+    case 'lesson-close':ui.lesson=null;ui.lessonT=0;render(true);return;
+    case 'lesson-done':completeLesson(false);return;
+    case 'lesson-blank':completeLesson(true);return;
+    case 'startblank':startBlankSession(+b.dataset.n);return;
+    case 'blank-ans':answerBlank(+b.dataset.i);return;
+    case 'blank-next':nextBlank();return;
+    case 'blank-quit':ls.done=true;render(true);return;
+    case 'learn-home':ls=null;cs=null;ui.lesson=null;render(true);return;
     case 'startc':startC(+b.dataset.n);return;
     case 'cflip':cs.shown=true;render();return;
     case 'cok':rateC(true);return;
@@ -758,7 +876,7 @@ document.addEventListener('click',async e=>{
     case 'ntest':await testNotif();return;
     case 'copy':await copy({pub:S.vapidPub,priv:ui.priv,sub:ui.sub}[b.dataset.v]||'');return;
     case 'export':{const {key,...rest}=S;download(`cisa-backup-${dkey()}.json`,rest);return}
-    case 'reset':if(confirm('문제, 카드, 학습 기록을 모두 지우고 처음 상태로 돌릴까요?')&&confirm('정말 지울까요? 되돌릴 수 없어요.')){const k=S.key,vp=S.vapidPub;S=seed();S.key=k;S.vapidPub=vp;S.frozen={};S.freezes=0;S.remindHour=21;mergeBank();save();qs=null;cs=null;toast('초기화했어요.');render(true)}return;
+    case 'reset':if(confirm('문제, 이론, 카드와 학습 기록을 모두 지우고 처음 상태로 돌릴까요?')&&confirm('정말 지울까요? 되돌릴 수 없어요.')){const k=S.key,vp=S.vapidPub;S=seed();S.key=k;S.vapidPub=vp;S.frozen={};S.freezes=0;S.remindHour=21;mergeBank();mergeLearnBank();save();qs=null;cs=null;ls=null;ui.lesson=null;toast('초기화했어요.');render(true)}return;
   }
   }catch(err){toast(err.message||'문제가 생겼어요. 다시 시도해 주세요.');render()}
 });
@@ -771,7 +889,7 @@ document.addEventListener('change',async e=>{
     try{
       const o=JSON.parse(await f.text());
       if(el.id==='impitems'){const[nq,nc]=importItems(o);toast(`문제 ${nq}개, 카드 ${nc}장을 가져왔어요.`)}
-      else{if(!Array.isArray(o.qs)||!Array.isArray(o.cards))throw new Error('bad');S=Object.assign(S,o,{key:S.key});S.frozen=S.frozen||{};S.freezes=S.freezes||0;mergeBank();save();toast('백업을 불러왔어요.')}
+      else{if(!Array.isArray(o.qs)||!Array.isArray(o.cards))throw new Error('bad');S=Object.assign(S,o,{key:S.key});S.frozen=S.frozen||{};S.freezes=S.freezes||0;S.lessons=S.lessons||[];mergeBank();mergeLearnBank();save();toast('백업을 불러왔어요.')}
     }catch(err){toast('파일 형식을 확인해 주세요.')}
     el.value='';render();
   }
@@ -782,12 +900,15 @@ document.addEventListener('keydown',e=>{
   if(tab==='quiz'&&qs&&!qs.done){
     if(qs.picked===null&&/^[1-8]$/.test(e.key)&&+e.key<=qs.perm.length)answer(+e.key-1);
     else if(qs.picked!==null&&e.key==='Enter')nextQ();
+  }else if(tab==='cards'&&ls&&!ls.done){
+    if(ls.picked===null&&/^[1-3]$/.test(e.key))answerBlank(+e.key-1);
+    else if(ls.picked!==null&&e.key==='Enter')nextBlank();
   }else if(tab==='cards'&&cs&&!cs.done&&(e.key===' '||e.key==='Enter')){
     e.preventDefault();if(!cs.shown){cs.shown=true;render()}
   }
 });
 document.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState==='visible'){const before=S.freezeCheck;applyFreezes();if(before!==S.freezeCheck&&!(qs&&!qs.done)&&!(cs&&!cs.done))render();localRemind()}
+  if(document.visibilityState==='visible'){const before=S.freezeCheck;applyFreezes();if(before!==S.freezeCheck&&!(qs&&!qs.done)&&!(cs&&!cs.done)&&!(ls&&!ls.done))render();localRemind()}
 });
 /* 모의고사 타이머와 알림 확인 */
 setInterval(()=>{
@@ -801,6 +922,7 @@ setInterval(localRemind,60000);
 /* ---------- 시작 ---------- */
 const hadData=S.qs.length>0;
 const added=mergeBank();
+const addedLearn=mergeLearnBank();
 applyFreezes();
 save();
 if(added&&hadData)toast(`문제 ${added}개를 추가했어요.`);

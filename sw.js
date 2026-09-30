@@ -1,9 +1,9 @@
 // CISA 루틴 서비스 워커: 오프라인 캐시 + 연속 기록 알림
 const PREFIX = 'cisa-routine:' + self.registration.scope + ':';
-const CACHE = PREFIX + 'v4-pdf-ko';
+const CACHE = PREFIX + 'v5-learn-cloze';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png',
   './bank-d1.js', './bank-d2.js', './bank-d3.js', './bank-d4.js', './bank-d5.js',
-  './bank-n1.js', './bank-n2.js', './bank-n3.js', './bank-n4.js', './bank-n4b.js', './bank-n5.js', './bank-pdf-ko.js'];
+  './bank-n1.js', './bank-n2.js', './bank-n3.js', './bank-n4.js', './bank-n4b.js', './bank-n5.js', './bank-pdf-ko.js', './bank-learn.js'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
